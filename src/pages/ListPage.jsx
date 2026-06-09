@@ -41,7 +41,7 @@ export default function ListPage() {
   return (
     <div className="min-h-screen bg-gray-950">
       <Header />
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className="max-w-5xl mx-auto px-4 py-8 pb-28 sm:pb-8">
         <h2 className="text-white text-xl font-semibold mb-6">
           Pendientes de escuchar
           {data?.length > 0 && (

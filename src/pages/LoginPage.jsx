@@ -28,9 +28,8 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center px-4">
       <div className="max-w-sm w-full text-center space-y-8">
-        <div className="space-y-3">
-          <div className="text-5xl">🎵</div>
-          <h1 className="text-3xl font-bold text-white">ToListen</h1>
+        <div className="space-y-4">
+          <img src="/tolisten.png" alt="ToListen" className="h-24 w-auto mx-auto" />
           <p className="text-gray-400 text-sm leading-relaxed">
             Tu lista personal de álbumes pendientes.<br />
             Busca, guarda y lleva el registro de lo que escuchas.

@@ -5,6 +5,7 @@ import { supabase } from './lib/supabase'
 import { useAuthStore } from './store/authStore'
 import Toast from './components/ui/Toast'
 import SearchModal from './components/search/SearchModal'
+import BottomNav from './components/ui/BottomNav'
 import LoginPage from './pages/LoginPage'
 import AuthCallback from './pages/AuthCallback'
 import ListPage from './pages/ListPage'
@@ -70,6 +71,7 @@ function AppRoutes() {
         <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
       </Routes>
       <SearchModal />
+      <BottomNav />
       <Toast />
     </>
   )

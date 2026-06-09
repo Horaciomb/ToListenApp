@@ -17,43 +17,45 @@ export default function Header() {
   const avatarUrl = user?.user_metadata?.avatar_url
   const displayName = user?.user_metadata?.full_name || user?.email
 
+  const navLink = (to, label) => (
+    <Link
+      to={to}
+      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+        location.pathname === to
+          ? 'bg-gray-700 text-white'
+          : 'text-gray-400 hover:text-white hover:bg-gray-800'
+      }`}
+    >
+      {label}
+    </Link>
+  )
+
   return (
     <header className="bg-gray-900 border-b border-gray-800 sticky top-0 z-40">
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <span className="text-white font-bold text-lg">🎵 ToListen</span>
-          <nav className="flex items-center gap-1">
-            <Link
-              to="/list"
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                location.pathname === '/list'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
-            >
-              Pendientes
-            </Link>
-            <Link
-              to="/history"
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                location.pathname === '/history'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
-            >
-              Historial
-            </Link>
+
+        {/* Logo */}
+        <div className="flex items-center gap-4">
+          <img src="/tolisten.png" alt="ToListen" className="h-8 w-auto" />
+
+          {/* Nav — solo desktop */}
+          <nav className="hidden sm:flex items-center gap-1">
+            {navLink('/list', 'Pendientes')}
+            {navLink('/history', 'Historial')}
           </nav>
         </div>
 
+        {/* Acciones derecha */}
         <div className="flex items-center gap-3">
+          {/* Botón añadir — solo desktop */}
           <button
             onClick={() => setSearchModalOpen(true)}
-            className="bg-green-600 hover:bg-green-500 text-white text-sm font-medium px-3 py-1.5 rounded-md transition-colors"
+            className="hidden sm:block bg-green-600 hover:bg-green-500 text-white text-sm font-medium px-3 py-1.5 rounded-md transition-colors"
           >
             + Añadir álbum
           </button>
 
+          {/* Avatar + logout */}
           <div className="flex items-center gap-2">
             {avatarUrl ? (
               <img
@@ -74,6 +76,7 @@ export default function Header() {
             </button>
           </div>
         </div>
+
       </div>
     </header>
   )
