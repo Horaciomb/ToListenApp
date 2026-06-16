@@ -153,3 +153,22 @@ export function useDeleteAlbum() {
     }
   })
 }
+
+// Guarda la nota personal de un álbum. Cadena vacía → null (limpia la nota).
+export function useUpdateNotes() {
+  const queryClient = useQueryClient()
+  const userId = useAuthStore(s => s.user?.id)
+  return useMutation({
+    mutationFn: async ({ userAlbumId, notes }) => {
+      const { error } = await supabase
+        .from('user_albums')
+        .update({ notes: notes?.trim() ? notes.trim() : null })
+        .eq('id', userAlbumId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-albums', 'pending', userId] })
+      queryClient.invalidateQueries({ queryKey: ['user-albums', 'listened', userId] })
+    }
+  })
+}

@@ -48,6 +48,7 @@ import {
   useMarkListened,
   useRevertPending,
   useDeleteAlbum,
+  useUpdateNotes,
 } from './useAlbums'
 
 const USER_ID = 'user-1'
@@ -212,5 +213,30 @@ describe('useDeleteAlbum', () => {
     expect(findCall('delete')).toBeTruthy()
     expect(findCall('from').args[0]).toBe('user_albums')
     expect(findCall('eq').args).toEqual(['id', 'ua-1'])
+  })
+})
+
+describe('useUpdateNotes', () => {
+  it('guarda la nota recortada por id', async () => {
+    setResults([{ error: null }])
+
+    const { result } = renderHook(() => useUpdateNotes(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync({ userAlbumId: 'ua-1', notes: '  buen disco  ' })
+    })
+
+    expect(findCall('update').args[0]).toEqual({ notes: 'buen disco' })
+    expect(findCall('eq').args).toEqual(['id', 'ua-1'])
+  })
+
+  it('guarda null cuando la nota queda vacía', async () => {
+    setResults([{ error: null }])
+
+    const { result } = renderHook(() => useUpdateNotes(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync({ userAlbumId: 'ua-1', notes: '   ' })
+    })
+
+    expect(findCall('update').args[0]).toEqual({ notes: null })
   })
 })

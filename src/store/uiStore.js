@@ -5,7 +5,8 @@ export const TOAST = {
   markedListened:  '✓ Marcado como escuchado',
   revertedPending: '✓ Vuelto a pendientes',
   albumDeleted:    'Eliminado de tu lista',
-  tokenExpired:    'Tu sesión con Spotify expiró. Inicia sesión de nuevo.',
+  notesSaved:      '✓ Nota guardada',
+  tokenExpired:    'Tu sesión expiró. Inicia sesión de nuevo.',
   genericError:    'Ocurrió un error. Intenta de nuevo.',
 }
 

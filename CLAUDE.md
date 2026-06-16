@@ -1050,5 +1050,25 @@ Refactor de autenticación y acceso al API de Spotify (Fase 7 completada):
   `supabase.functions.invoke('spotify-proxy', ...)`, que incluye el JWT automáticamente.
 - **Nuevo archivo:** `supabase/functions/spotify-proxy/index.ts`.
 
-Pendiente de despliegue (acción manual del usuario):
-`supabase functions deploy spotify-proxy`
+Edge Function desplegada (`supabase functions deploy spotify-proxy`).
+
+### Robustez y calidad
+
+- **Manejo de sesión expirada unificado:** la Edge Function responde 401 → `lib/spotify.js`
+  lanza `Error('SESSION_EXPIRED')` → `handleTokenExpired` (toast + signOut + redirect).
+  Cubierto en mutaciones y en el buscador en vivo (`useSpotifySearch`).
+- **Error boundary global** (`components/ui/ErrorBoundary.jsx`) envolviendo la app.
+- **`useAddAlbum` respeta `albums_cache`:** solo pega a Spotify si el álbum no está cacheado.
+- **Tests con Vitest** (`npm test`): `lib/spotify`, `lib/utils`, y hooks de mutación
+  (`hooks/useAlbums`) con `@testing-library/react` + `jsdom`.
+
+### Features post-MVP
+
+- **Notas por álbum** (`notes`): editable inline desde la `AlbumCard`
+  (`components/album/AlbumNotes.jsx`, hook `useUpdateNotes`). Esto **reemplaza** la
+  regla #10 ("no implementar UI para notes en MVP").
+- **Filtro y orden en las listas** (`components/album/ListControls.jsx` +
+  `filterAndSortAlbums` en `lib/utils.js`): buscar por título/artista y ordenar por
+  recientes / artista / año / duración / título.
+- **Stats por página:** pendientes muestra total + duración por escuchar; historial
+  muestra total + escuchados este mes.

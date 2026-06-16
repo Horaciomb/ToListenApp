@@ -1,6 +1,7 @@
 import { formatDuration, formatDate, getReleaseYear } from '../../lib/utils'
+import AlbumNotes from './AlbumNotes'
 
-export default function AlbumCard({ album, userAlbum, variant, onMarkListened, onRevertPending, onDelete, isProcessing }) {
+export default function AlbumCard({ album, userAlbum, variant, onMarkListened, onRevertPending, onDelete, onUpdateNotes, isProcessing }) {
   const handleDelete = () => {
     if (!window.confirm('¿Eliminar este álbum de tu lista?')) return
     onDelete(userAlbum.id)
@@ -27,27 +28,37 @@ export default function AlbumCard({ album, userAlbum, variant, onMarkListened, o
 
       {/* Info */}
       <div className="flex-1 p-3 sm:p-4 flex flex-col justify-between min-w-0">
-        <div className="space-y-0.5 min-w-0">
-          <h3 className="text-white font-semibold text-sm leading-tight line-clamp-2">
-            {album.name}
-          </h3>
-          <p className="text-gray-400 text-xs truncate">{album.artist_name}</p>
-          <p className="text-gray-500 text-xs">
-            {getReleaseYear(album.release_date)}
-            {album.total_tracks > 0 && (
-              <> · {album.total_tracks} canciones · {formatDuration(album.duration_ms)}</>
-            )}
-          </p>
+        <div className="min-w-0">
+          <div className="space-y-0.5 min-w-0">
+            <h3 className="text-white font-semibold text-sm leading-tight line-clamp-2">
+              {album.name}
+            </h3>
+            <p className="text-gray-400 text-xs truncate">{album.artist_name}</p>
+            <p className="text-gray-500 text-xs">
+              {getReleaseYear(album.release_date)}
+              {album.total_tracks > 0 && (
+                <> · {album.total_tracks} canciones · {formatDuration(album.duration_ms)}</>
+              )}
+            </p>
 
-          {variant === 'pending' && (
-            <p className="text-gray-600 text-xs pt-0.5">
-              Añadido el {formatDate(userAlbum.added_at)}
-            </p>
-          )}
-          {variant === 'listened' && formatDate(userAlbum.listened_at) && (
-            <p className="text-gray-600 text-xs pt-0.5">
-              Escuchado el {formatDate(userAlbum.listened_at)}
-            </p>
+            {variant === 'pending' && (
+              <p className="text-gray-600 text-xs pt-0.5">
+                Añadido el {formatDate(userAlbum.added_at)}
+              </p>
+            )}
+            {variant === 'listened' && formatDate(userAlbum.listened_at) && (
+              <p className="text-gray-600 text-xs pt-0.5">
+                Escuchado el {formatDate(userAlbum.listened_at)}
+              </p>
+            )}
+          </div>
+
+          {onUpdateNotes && (
+            <AlbumNotes
+              notes={userAlbum.notes}
+              disabled={isProcessing}
+              onSave={(text) => onUpdateNotes(userAlbum.id, text)}
+            />
           )}
         </div>
 

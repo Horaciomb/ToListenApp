@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDuration, formatDate, getReleaseYear } from './utils'
+import { formatDuration, formatDate, getReleaseYear, filterAndSortAlbums } from './utils'
 
 describe('formatDuration', () => {
   it('devuelve "--" para 0, null o undefined', () => {
@@ -49,5 +49,65 @@ describe('getReleaseYear', () => {
 
   it('devuelve el valor tal cual cuando la precisión es solo el año', () => {
     expect(getReleaseYear('2015')).toBe('2015')
+  })
+})
+
+describe('filterAndSortAlbums', () => {
+  const items = [
+    { id: '1', added_at: '2024-01-01', listened_at: '2024-03-01', albums_cache: { name: 'Kid A', artist_name: 'Radiohead', release_date: '2000-10-02', duration_ms: 3000 } },
+    { id: '2', added_at: '2024-02-01', listened_at: '2024-01-01', albums_cache: { name: 'Blonde', artist_name: 'Frank Ocean', release_date: '2016-08-20', duration_ms: 1000 } },
+    { id: '3', added_at: '2024-03-01', listened_at: '2024-02-01', albums_cache: { name: 'Currents', artist_name: 'Tame Impala', release_date: '2015-07-17', duration_ms: 2000 } },
+  ]
+
+  it('devuelve [] para entradas no-array', () => {
+    expect(filterAndSortAlbums(null, {})).toEqual([])
+    expect(filterAndSortAlbums(undefined, {})).toEqual([])
+  })
+
+  it('no muta el array original', () => {
+    const copy = [...items]
+    filterAndSortAlbums(items, { sort: 'artist' })
+    expect(items).toEqual(copy)
+  })
+
+  it('filtra por nombre de álbum (case-insensitive)', () => {
+    const result = filterAndSortAlbums(items, { query: 'blon' })
+    expect(result.map(i => i.id)).toEqual(['2'])
+  })
+
+  it('filtra por artista (case-insensitive)', () => {
+    const result = filterAndSortAlbums(items, { query: 'RADIOHEAD' })
+    expect(result.map(i => i.id)).toEqual(['1'])
+  })
+
+  it('ordena por artista A-Z', () => {
+    const result = filterAndSortAlbums(items, { sort: 'artist' })
+    expect(result.map(i => i.albums_cache.artist_name)).toEqual(['Frank Ocean', 'Radiohead', 'Tame Impala'])
+  })
+
+  it('ordena por año (nuevo a viejo)', () => {
+    const result = filterAndSortAlbums(items, { sort: 'year' })
+    expect(result.map(i => i.id)).toEqual(['2', '3', '1'])
+  })
+
+  it('ordena por duración (larga a corta)', () => {
+    const result = filterAndSortAlbums(items, { sort: 'duration' })
+    expect(result.map(i => i.id)).toEqual(['1', '3', '2'])
+  })
+
+  it('ordena por añadido reciente', () => {
+    const result = filterAndSortAlbums(items, { sort: 'recent_added' })
+    expect(result.map(i => i.id)).toEqual(['3', '2', '1'])
+  })
+
+  it('ordena por escuchado reciente', () => {
+    const result = filterAndSortAlbums(items, { sort: 'recent_listened' })
+    expect(result.map(i => i.id)).toEqual(['1', '3', '2'])
+  })
+
+  it('combina filtro y orden', () => {
+    const result = filterAndSortAlbums(items, { query: 'a', sort: 'artist' })
+    // "a" matchea Kid A, Radiohead, Tame Impala, Frank Ocean (todos) -> ordena por artista
+    expect(result.map(i => i.albums_cache.artist_name)).toEqual(['Frank Ocean', 'Radiohead', 'Tame Impala'])
   })
 })
