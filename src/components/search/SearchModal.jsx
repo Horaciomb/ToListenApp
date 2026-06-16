@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUiStore, TOAST } from '../../store/uiStore'
 import { useSpotifySearch } from '../../hooks/useSpotifySearch'
@@ -12,27 +12,25 @@ export default function SearchModal() {
   const showToast = useUiStore(s => s.showToast)
   const navigate = useNavigate()
 
-  const onTokenExpired = () => handleTokenExpired(navigate, showToast)
-
-  const search = useSpotifySearch({ onTokenExpired })
+  const search = useSpotifySearch()
   const { data: myAlbumIds = new Map() } = useMyAlbumIds()
   const addAlbum = useAddAlbum()
   const inputRef = useRef(null)
+
+  const handleClose = useCallback(() => {
+    search.clear()
+    setSearchModalOpen(false)
+  }, [search, setSearchModalOpen])
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') handleClose() }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [handleClose])
 
   useEffect(() => {
     if (isOpen) setTimeout(() => inputRef.current?.focus(), 50)
   }, [isOpen])
-
-  const handleClose = () => {
-    search.clear()
-    setSearchModalOpen(false)
-  }
 
   const handleAdd = async (album) => {
     try {

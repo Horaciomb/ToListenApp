@@ -5,20 +5,26 @@ import { useUiStore } from '../store/uiStore'
 import { handleTokenExpired } from '../lib/handleTokenExpired'
 
 export function useSpotifySearch() {
-  const [query, setQuery] = useState('')
+  const [query, setQueryState] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const navigate = useNavigate()
   const showToast = useUiStore(s => s.showToast)
 
-  useEffect(() => {
-    if (!query.trim()) {
+  // Resetea el estado en el mismo evento que vacía el input (no en el effect),
+  // así la limpieza es inmediata y no quedan resultados viejos en pantalla.
+  const setQuery = useCallback((value) => {
+    setQueryState(value)
+    if (!value.trim()) {
       setResults([])
-      setLoading(false)
       setError(null)
-      return
+      setLoading(false)
     }
+  }, [])
+
+  useEffect(() => {
+    if (!query.trim()) return
 
     let cancelled = false
 
@@ -49,10 +55,7 @@ export function useSpotifySearch() {
 
   const clear = useCallback(() => {
     setQuery('')
-    setResults([])
-    setError(null)
-    setLoading(false)
-  }, [])
+  }, [setQuery])
 
   return { query, setQuery, results, loading, error, clear }
 }
