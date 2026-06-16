@@ -17,7 +17,8 @@ usuario a Spotify para escuchar.
 | Estado del servidor | TanStack Query v5 |
 | Estado global | Zustand v4 |
 | Base de datos + Auth | Supabase (PostgreSQL + RLS) |
-| Autenticación | Supabase Auth con Spotify como OAuth provider |
+| Autenticación | Supabase Auth con Google como OAuth provider |
+| API de música | Spotify Web API via Edge Function (Client Credentials) |
 | Routing | React Router v6 |
 | Deploy | Vercel |
 | Lenguaje | JavaScript (sin TypeScript) |
@@ -56,7 +57,7 @@ album-tracker/
 │   │       ├── Modal.jsx
 │   │       └── Toast.jsx             # componente visual del toast
 │   ├── pages/
-│   │   ├── LoginPage.jsx             # página pública con botón "Conectar con Spotify"
+│   │   ├── LoginPage.jsx             # página pública con botón "Continuar con Google"
 │   │   ├── ListPage.jsx              # lista de álbumes pendientes (ruta /list)
 │   │   ├── HistoryPage.jsx           # historial de álbumes escuchados (ruta /history)
 │   │   └── AuthCallback.jsx          # maneja el redirect de OAuth de Supabase
@@ -68,7 +69,7 @@ album-tracker/
 │   │   ├── spotify.js                # helpers para el API de Spotify
 │   │   └── utils.js                  # formatDuration, formatDate, etc.
 │   ├── store/
-│   │   ├── authStore.js              # Zustand: session, user, spotifyToken, loadingInitialSession
+│   │   ├── authStore.js              # Zustand: session, user, loadingInitialSession
 │   │   └── uiStore.js                # Zustand: isSearchModalOpen, toast
 │   ├── App.jsx                       # routing + auth bootstrap
 │   └── main.jsx
@@ -214,19 +215,16 @@ import { create } from 'zustand'
 export const useAuthStore = create((set) => ({
   session: null,
   user: null,
-  spotifyToken: null,
   loadingInitialSession: true,   // ← empieza en true, nunca muestra ruta protegida hasta que sea false
 
   setSession: (session) => set({
     session,
     user: session?.user ?? null,
-    spotifyToken: session?.provider_token ?? null,
   }),
 
   clearSession: () => set({
     session: null,
     user: null,
-    spotifyToken: null,
   }),
 
   setLoading: (v) => set({ loadingInitialSession: v }),
@@ -296,21 +294,20 @@ function ProtectedRoute({ children }) {
 
 ---
 
-## Autenticación con Spotify via Supabase
+## Autenticación con Google via Supabase
 
 ### Configuración en Supabase dashboard
-1. Authentication > Providers > Spotify → habilitar
-2. Pegar Client ID y Client Secret de la Spotify Developer App
-3. En la Spotify Developer App, añadir como Redirect URI:
+1. Authentication > Providers > Google → habilitar
+2. Pegar Client ID y Client Secret de Google Cloud Console
+3. En Google Cloud Console, el Redirect URI autorizado es:
    `https://[tu-proyecto-id].supabase.co/auth/v1/callback`
 
 ### Login desde React
 ```javascript
 const handleLogin = async () => {
   const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'spotify',
+    provider: 'google',
     options: {
-      scopes: 'user-read-email user-read-private',
       redirectTo: `${window.location.origin}/auth/callback`
     }
   })
@@ -323,8 +320,6 @@ const handleLogin = async () => {
 export default function AuthCallback() {
   const navigate = useNavigate()
   useEffect(() => {
-    // Supabase maneja el intercambio de código automáticamente.
-    // Solo esperar la sesión y redirigir.
     supabase.auth.getSession().then(({ data: { session } }) => {
       navigate(session ? '/list' : '/login', { replace: true })
     })
@@ -337,47 +332,56 @@ export default function AuthCallback() {
 }
 ```
 
-### Manejo de token expirado de Spotify
+### Manejo de errores de sesión
+Si una llamada a la Edge Function devuelve 401, la sesión de Supabase expiró.
+Ejecutar `supabase.auth.signOut()`, limpiar el store con `clearSession()` y redirigir a `/login`.
 
-Cuando `spotify.js` lanza `'SPOTIFY_TOKEN_EXPIRED'`, ejecutar este flujo completo:
+---
 
-```javascript
-// Puede llamarse desde cualquier componente o hook
-export async function handleTokenExpired(navigate, showToast) {
-  showToast('Tu sesión con Spotify expiró. Inicia sesión de nuevo.', 'error')
-  useAuthStore.getState().clearSession()
-  await supabase.auth.signOut()
-  navigate('/login', { replace: true })
-}
-```
+## supabase/functions/spotify-proxy/index.ts — Edge Function
+
+Archivo nuevo. Toda la comunicación con el API de Spotify pasa por aquí usando
+Client Credentials (servidor a servidor). Los secretos `SPOTIFY_CLIENT_ID` y
+`SPOTIFY_CLIENT_SECRET` viven en Supabase Edge Function Secrets, nunca en el frontend.
+
+La función verifica que el request tenga un JWT válido de Supabase antes de llamar
+a Spotify. Si el JWT es inválido → responde 401. Soporta dos acciones:
+- `{ action: 'search', query: '...' }` → busca álbumes
+- `{ action: 'album', albumId: '...' }` → detalle completo de un álbum
+
+El token de Spotify (Client Credentials) se cachea en memoria con su tiempo de
+expiración y se reutiliza entre requests para no pedir uno nuevo en cada llamada.
+
+Incluir CORS headers en todas las respuestas, incluyendo el preflight OPTIONS.
 
 ---
 
 ## lib/spotify.js
 
-```javascript
-const SPOTIFY_API = 'https://api.spotify.com/v1'
+Las funciones ya NO llaman directamente a api.spotify.com.
+Llaman a la Edge Function usando `supabase.functions.invoke()`, que automáticamente
+incluye el JWT del usuario autenticado en el header. Sin parámetro token.
 
-async function spotifyFetch(url, token) {
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` }
-  })
-  if (res.status === 401) throw new Error('SPOTIFY_TOKEN_EXPIRED')
-  if (!res.ok) throw new Error(`Spotify API error: ${res.status}`)
-  return res.json()
-}
+```javascript
+import { supabase } from './supabase'
 
 // Búsqueda rápida — NO incluye duration_ms ni lista de tracks
-export async function searchAlbums(query, token) {
-  const params = new URLSearchParams({ q: query, type: 'album', limit: '10' })
-  const data = await spotifyFetch(`${SPOTIFY_API}/search?${params}`, token)
-  return data.albums.items
+export async function searchAlbums(query) {
+  const { data, error } = await supabase.functions.invoke('spotify-proxy', {
+    body: { action: 'search', query }
+  })
+  if (error) throw new Error(error.message)
+  return data
 }
 
 // Detalle completo — incluye tracks para calcular duration_ms
 // SIEMPRE llamar esto antes de insertar en albums_cache
-export async function getAlbumDetails(albumId, token) {
-  return spotifyFetch(`${SPOTIFY_API}/albums/${albumId}`, token)
+export async function getAlbumDetails(albumId) {
+  const { data, error } = await supabase.functions.invoke('spotify-proxy', {
+    body: { action: 'album', albumId }
+  })
+  if (error) throw new Error(error.message)
+  return data
 }
 
 // Construye el objeto listo para upsert en albums_cache
@@ -403,7 +407,6 @@ export function buildAlbumCacheEntry(spotifyAlbum) {
     popularity:             spotifyAlbum.popularity
   }
 }
-```
 
 ---
 
@@ -545,7 +548,7 @@ export const TOAST = {
   markedListened:  '✓ Marcado como escuchado',
   revertedPending: '✓ Vuelto a pendientes',
   albumDeleted:    'Eliminado de tu lista',
-  tokenExpired:    'Tu sesión con Spotify expiró. Inicia sesión de nuevo.',
+  tokenExpired:    'Tu sesión expiró. Inicia sesión de nuevo.',
   genericError:    'Ocurrió un error. Intenta de nuevo.',
 }
 
@@ -592,7 +595,6 @@ El flag `cancelled` previene que respuestas de búsquedas anteriores sobreescrib
 
 ```javascript
 import { useState, useEffect, useCallback } from 'react'
-import { useAuthStore } from '../store/authStore'
 import { searchAlbums } from '../lib/spotify'
 
 export function useSpotifySearch() {
@@ -600,7 +602,6 @@ export function useSpotifySearch() {
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const spotifyToken = useAuthStore(s => s.spotifyToken)
 
   useEffect(() => {
     if (!query.trim()) {
@@ -616,25 +617,21 @@ export function useSpotifySearch() {
       setLoading(true)
       setError(null)
       try {
-        const data = await searchAlbums(query, spotifyToken)
-        if (!cancelled) setResults(data)          // ← ignorar si ya es stale
+        const data = await searchAlbums(query)   // ← sin token
+        if (!cancelled) setResults(data)
       } catch (err) {
-        if (!cancelled) {
-          if (err.message === 'SPOTIFY_TOKEN_EXPIRED') throw err  // propagar para manejarlo arriba
-          setError('Error al buscar. Intenta de nuevo.')
-        }
+        if (!cancelled) setError('Error al buscar. Intenta de nuevo.')
       } finally {
         if (!cancelled) setLoading(false)
       }
     }, 400)
 
     return () => {
-      cancelled = true    // ← marca la búsqueda anterior como obsoleta
+      cancelled = true
       clearTimeout(timer)
     }
-  }, [query, spotifyToken])
+  }, [query])   // ← sin spotifyToken en las dependencias
 
-  // Llamar al cerrar el modal para limpiar todo
   const clear = useCallback(() => {
     setQuery('')
     setResults([])
@@ -722,12 +719,11 @@ export function useMyAlbumIds() {
 export function useAddAlbum() {
   const queryClient = useQueryClient()
   const userId = useAuthStore(s => s.user?.id)
-  const spotifyToken = useAuthStore(s => s.spotifyToken)
 
   return useMutation({
     mutationFn: async (albumFromSearch) => {
-      // Paso 1: detalles completos (necesario para duration_ms)
-      const details = await getAlbumDetails(albumFromSearch.id, spotifyToken)
+      // Paso 1: detalles completos via Edge Function (necesario para duration_ms)
+      const details = await getAlbumDetails(albumFromSearch.id)   // ← sin token
 
       // Paso 2: guardar/actualizar en cache compartido
       const cacheEntry = buildAlbumCacheEntry(details)
@@ -977,76 +973,55 @@ resultados mientras uno está siendo añadido.
 
 ---
 
+## Estado del proyecto
+
+**Fases 1 a 6 completadas y desplegadas en Vercel.** La app funciona con Google OAuth
+y búsqueda de Spotify via Edge Function. No tocar el código existente salvo lo indicado
+en la Fase 7.
+
 ## Fases de desarrollo (TODO)
 
-### Fase 1 — Setup y autenticación
-- [ ] `npm create vite@latest album-tracker -- --template react`
-- [ ] Instalar: `npm install @supabase/supabase-js @tanstack/react-query zustand react-router-dom`
-- [ ] Instalar dev: `npm install -D tailwindcss postcss autoprefixer` + `npx tailwindcss init -p`
-- [ ] Configurar `tailwind.config.js` (content paths)
-- [ ] `src/lib/supabase.js` — cliente singleton
-- [ ] `src/store/authStore.js` — con todos los campos del spec
-- [ ] `src/store/uiStore.js` — con toast y isSearchModalOpen
-- [ ] Auth bootstrap en `App.jsx` con `onAuthStateChange`
-- [ ] `LoginPage.jsx` — botón "Conectar con Spotify"
-- [ ] `AuthCallback.jsx`
-- [ ] `ProtectedRoute` con guarda de `loadingInitialSession`
-- [ ] Header con avatar y botón de logout
-- [ ] Componente `Toast.jsx` en raíz de App
-- [ ] Verificar flujo: login → callback → /list → logout sin flash ni parpadeos
+### ✅ Fase 1 — Setup y autenticación (completa)
+### ✅ Fase 2 — Base de datos (completa)
+### ✅ Fase 3 — Lista de pendientes (completa)
+### ✅ Fase 4 — Búsqueda y añadir (completa)
+### ✅ Fase 5 — Historial (completa)
+### ✅ Fase 6 — Polish y deploy (completa)
 
-### Fase 2 — Base de datos
-- [ ] Ejecutar SQL completo en Supabase SQL Editor
-- [ ] Verificar que el trigger crea el profile automáticamente al primer login
-- [ ] Verificar RLS: el usuario solo ve sus `user_albums`
-- [ ] Confirmar constraint `unique_user_album` activo
-
-### Fase 3 — Lista de pendientes (core)
-- [ ] `hooks/useAlbums.js`: `usePendingAlbums`, `useMarkListened`, `useDeleteAlbum`
-- [ ] `ListPage.jsx` con grid responsivo (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`)
-- [ ] `AlbumCard.jsx` variant 'pending' con destructuring correcto
-- [ ] `AlbumCardSkeleton.jsx`
-- [ ] `EmptyState.jsx` — "Tu lista está vacía. Busca un álbum para empezar."
-- [ ] Fallback de imagen con placeholder 🎵
-- [ ] Acción marcar como escuchado → toast `TOAST.markedListened`
-- [ ] Acción eliminar → `window.confirm` + toast `TOAST.albumDeleted`
-
-### Fase 4 — Búsqueda y añadir
-- [ ] `lib/spotify.js` completo
-- [ ] `hooks/useSpotifySearch.js` con flag `cancelled`
-- [ ] `hooks/useAlbums.js`: agregar `useMyAlbumIds` y `useAddAlbum`
-- [ ] `SearchModal.jsx` con cierre limpio (llama `search.clear()`)
-- [ ] `SearchResultItem.jsx` con spinner individual por ítem
-- [ ] Indicadores "En tu lista" / "Ya escuchado" en resultados
-- [ ] FAB o botón en header para abrir el modal
-- [ ] Toast `TOAST.albumAdded` al añadir con éxito
-
-### Fase 5 — Historial
-- [ ] `hooks/useAlbums.js`: agregar `useListenedAlbums` y `useRevertPending`
-- [ ] `HistoryPage.jsx` con grid responsivo
-- [ ] `AlbumCard.jsx` variant 'listened'
-- [ ] Acción volver a pendiente → toast `TOAST.revertedPending`
-- [ ] Acción eliminar del historial → `window.confirm` + toast `TOAST.albumDeleted`
-
-### Fase 6 — Polish y deploy
-- [ ] Manejo de `SPOTIFY_TOKEN_EXPIRED` en todos los puntos → `handleTokenExpired()`
-- [ ] Loading states visibles en todas las mutaciones (botones con spinner o disabled)
-- [ ] `vercel.json`
-- [ ] Variables de entorno en Vercel dashboard
-- [ ] Añadir dominio Vercel a Redirect URIs en Spotify Developer Dashboard
-- [ ] Añadir dominio Vercel a Site URLs en Supabase Auth settings
-- [ ] Probar flujo completo en producción
+### Fase 7 — Migración a Google Auth + Edge Function (PENDIENTE)
+- [ ] Crear `supabase/functions/spotify-proxy/index.ts` (ver spec en este archivo)
+- [ ] Eliminar `spotifyToken` de `store/authStore.js`
+- [ ] Actualizar `lib/spotify.js`: funciones sin parámetro token, usando `supabase.functions.invoke`
+- [ ] Actualizar `hooks/useSpotifySearch.js`: eliminar dependencia de spotifyToken
+- [ ] Actualizar `hooks/useAlbums.js` → `useAddAlbum`: eliminar spotifyToken
+- [ ] Actualizar `pages/LoginPage.jsx`: cambiar provider a `'google'`, botón "Continuar con Google"
+- [ ] Deployar Edge Function: `supabase functions deploy spotify-proxy`
+- [ ] Verificar flujo completo: login Google → buscar álbum → añadir → marcar escuchado
 
 ---
 
-## Notas de configuración de Spotify Developer
+## Configuración de servicios externos (estado actual)
 
-1. Crear app en https://developer.spotify.com/dashboard
-2. Añadir Redirect URIs:
-   - `https://[id-proyecto].supabase.co/auth/v1/callback` (Supabase maneja esto)
-   - `http://localhost:5173/auth/callback` (desarrollo local)
-3. Copiar Client ID y Client Secret al dashboard de Supabase (Auth > Providers > Spotify)
-4. La app estará en modo desarrollo (25 usuarios máximo) — suficiente para uso personal
+### Google Cloud Console
+- OAuth 2.0 Client ID configurado
+- Redirect URI autorizado: `https://[proyecto].supabase.co/auth/v1/callback`
+- Credenciales cargadas en Supabase > Auth > Providers > Google
+
+### Supabase
+- Google habilitado como OAuth provider
+- Spotify deshabilitado como OAuth provider
+- Edge Function Secrets configurados:
+  - `SPOTIFY_CLIENT_ID`
+  - `SPOTIFY_CLIENT_SECRET`
+
+### Spotify Developer Dashboard
+- App existente con sus credenciales — las mismas que están en Supabase Secrets
+- Ya no se usa para autenticación de usuarios
+- Solo se usa para la Edge Function con Client Credentials (sin límite de usuarios)
+
+### Vercel
+- Variables de entorno: `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`
+- Dominio de producción añadido a Supabase Auth > URL Configuration
 
 ---
 
@@ -1056,3 +1031,24 @@ resultados mientras uno está siendo añadido.
 - Estilo de código: JavaScript sin TypeScript, componentes funcionales con hooks
 - El proyecto es personal — priorizar velocidad de desarrollo sobre arquitectura perfecta
 - Si algo no está especificado en este CLAUDE.md, elegir la opción más simple
+
+---
+
+## Cambios post-v1
+
+Refactor de autenticación y acceso al API de Spotify (Fase 7 completada):
+
+- **Auth migrada de Spotify OAuth a Google OAuth.** Spotify OAuth tenía un límite de
+  5 usuarios; Google OAuth no. El provider de `signInWithOAuth` ahora es `'google'`.
+- **Llamadas al API de Spotify movidas a una Edge Function (`spotify-proxy`).** El frontend
+  ya no llama a `api.spotify.com`; todo pasa por la función con Client Credentials
+  (servidor a servidor, sin límite de usuarios). La función verifica el JWT de Supabase
+  antes de llamar a Spotify y cachea el token de Spotify en memoria.
+- **`spotifyToken` eliminado del `authStore`.** Ya no se guarda `provider_token`; las
+  llamadas a Spotify no dependen del token del usuario.
+- **`searchAlbums` y `getAlbumDetails` ya no reciben `token` como parámetro.** Usan
+  `supabase.functions.invoke('spotify-proxy', ...)`, que incluye el JWT automáticamente.
+- **Nuevo archivo:** `supabase/functions/spotify-proxy/index.ts`.
+
+Pendiente de despliegue (acción manual del usuario):
+`supabase functions deploy spotify-proxy`

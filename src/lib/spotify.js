@@ -1,22 +1,30 @@
-const SPOTIFY_API = 'https://api.spotify.com/v1'
+import { supabase } from './supabase'
 
-async function spotifyFetch(url, token) {
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` }
+// Si la Edge Function responde 401, la sesión de Supabase expiró.
+// Normalizamos ese caso a un único error 'SESSION_EXPIRED' que la UI detecta.
+function toError(error) {
+  if (error.context?.status === 401) return new Error('SESSION_EXPIRED')
+  return new Error(error.message)
+}
+
+// Búsqueda rápida — NO incluye duration_ms ni lista de tracks.
+// Va por la Edge Function spotify-proxy; el JWT del usuario se incluye solo.
+export async function searchAlbums(query) {
+  const { data, error } = await supabase.functions.invoke('spotify-proxy', {
+    body: { action: 'search', query }
   })
-  if (res.status === 401) throw new Error('SPOTIFY_TOKEN_EXPIRED')
-  if (!res.ok) throw new Error(`Spotify API error: ${res.status}`)
-  return res.json()
+  if (error) throw toError(error)
+  return data
 }
 
-export async function searchAlbums(query, token) {
-  const params = new URLSearchParams({ q: query, type: 'album', limit: '10' })
-  const data = await spotifyFetch(`${SPOTIFY_API}/search?${params}`, token)
-  return data.albums.items
-}
-
-export async function getAlbumDetails(albumId, token) {
-  return spotifyFetch(`${SPOTIFY_API}/albums/${albumId}`, token)
+// Detalle completo — incluye tracks para calcular duration_ms.
+// SIEMPRE llamar esto antes de insertar en albums_cache.
+export async function getAlbumDetails(albumId) {
+  const { data, error } = await supabase.functions.invoke('spotify-proxy', {
+    body: { action: 'album', albumId }
+  })
+  if (error) throw toError(error)
+  return data
 }
 
 export function buildAlbumCacheEntry(spotifyAlbum) {

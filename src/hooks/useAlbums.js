@@ -63,11 +63,10 @@ export function useMyAlbumIds() {
 export function useAddAlbum() {
   const queryClient = useQueryClient()
   const userId = useAuthStore(s => s.user?.id)
-  const spotifyToken = useAuthStore(s => s.spotifyToken)
 
   return useMutation({
     mutationFn: async (albumFromSearch) => {
-      const details = await getAlbumDetails(albumFromSearch.id, spotifyToken)
+      const details = await getAlbumDetails(albumFromSearch.id)
 
       const cacheEntry = buildAlbumCacheEntry(details)
       const { error: cacheError } = await supabase

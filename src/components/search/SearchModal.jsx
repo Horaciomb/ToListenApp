@@ -39,7 +39,7 @@ export default function SearchModal() {
       await addAlbum.mutateAsync(album)
       showToast(TOAST.albumAdded)
     } catch (err) {
-      if (err.message === 'SPOTIFY_TOKEN_EXPIRED') {
+      if (err.message === 'SESSION_EXPIRED') {
         handleClose()
         handleTokenExpired(navigate, showToast)
         return

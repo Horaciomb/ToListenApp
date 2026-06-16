@@ -22,7 +22,7 @@ export default function ListPage() {
       await fn(id)
       showToast(successMsg, successType)
     } catch (err) {
-      if (err.message === 'SPOTIFY_TOKEN_EXPIRED') {
+      if (err.message === 'SESSION_EXPIRED') {
         handleTokenExpired(navigate, showToast)
         return
       }
