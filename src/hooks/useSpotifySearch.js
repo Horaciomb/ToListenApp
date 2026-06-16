@@ -1,11 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { searchAlbums } from '../lib/spotify'
+import { useUiStore } from '../store/uiStore'
+import { handleTokenExpired } from '../lib/handleTokenExpired'
 
 export function useSpotifySearch() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const navigate = useNavigate()
+  const showToast = useUiStore(s => s.showToast)
 
   useEffect(() => {
     if (!query.trim()) {
@@ -23,8 +28,14 @@ export function useSpotifySearch() {
       try {
         const data = await searchAlbums(query)
         if (!cancelled) setResults(data)
-      } catch {
-        if (!cancelled) setError('Error al buscar. Intenta de nuevo.')
+      } catch (err) {
+        if (!cancelled) {
+          if (err.message === 'SESSION_EXPIRED') {
+            handleTokenExpired(navigate, showToast)
+          } else {
+            setError('Error al buscar. Intenta de nuevo.')
+          }
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -34,7 +45,7 @@ export function useSpotifySearch() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [query])
+  }, [query, navigate, showToast])
 
   const clear = useCallback(() => {
     setQuery('')
