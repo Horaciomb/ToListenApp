@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
+import InstallButton from './InstallButton'
 
 export default function Header() {
   const user = useAuthStore(s => s.user)
@@ -47,6 +48,8 @@ export default function Header() {
 
         {/* Acciones derecha */}
         <div className="flex items-center gap-3">
+          <InstallButton />
+
           {/* Botón añadir — solo desktop */}
           <button
             onClick={() => setSearchModalOpen(true)}

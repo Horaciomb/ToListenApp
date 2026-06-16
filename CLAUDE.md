@@ -1072,3 +1072,8 @@ Edge Function desplegada (`supabase functions deploy spotify-proxy`).
   recientes / artista / año / duración / título.
 - **Stats por página:** pendientes muestra total + duración por escuchar; historial
   muestra total + escuchados este mes.
+- **PWA instalable:** `public/manifest.webmanifest` + `public/sw.js` (service worker
+  con app-shell offline, network-first en navegaciones). Registro en `lib/pwa.js`
+  (`registerServiceWorker`, solo en producción desde `main.jsx`). Botón de instalar
+  vía `hooks/useInstallPrompt.js` + `components/ui/InstallButton.jsx`. Íconos
+  `public/icon-192.png` y `public/icon-512.png` generados desde `tolisten.png`.
