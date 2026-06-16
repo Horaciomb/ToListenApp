@@ -969,17 +969,20 @@ resultados mientras uno está siendo añadido.
 9. **El `user_id` en inserts siempre es el del usuario autenticado** — tomarlo del store,
    nunca de parámetros externos.
 
-10. **`notes` existe en el schema para uso futuro** — no implementar UI para este campo en MVP.
+10. ~~**`notes` existe en el schema para uso futuro** — no implementar UI para este campo en MVP.~~
+    **(Implementado post-v1)** `notes` ahora tiene UI editable inline en `AlbumCard`
+    (`components/album/AlbumNotes.jsx` + hook `useUpdateNotes`).
 
 ---
 
 ## Estado del proyecto
 
-**Fases 1 a 6 completadas y desplegadas en Vercel.** La app funciona con Google OAuth
-y búsqueda de Spotify via Edge Function. No tocar el código existente salvo lo indicado
-en la Fase 7.
+**Todas las fases (1 a 7) completadas y desplegadas en Vercel**, más el trabajo post-v1
+(robustez, features y PWA — ver sección "Cambios post-v1"). La app usa Google OAuth y
+búsqueda de Spotify vía Edge Function, es instalable como PWA, y tiene suite de tests
+con Vitest (`npm test`).
 
-## Fases de desarrollo (TODO)
+## Fases de desarrollo
 
 ### ✅ Fase 1 — Setup y autenticación (completa)
 ### ✅ Fase 2 — Base de datos (completa)
@@ -988,15 +991,15 @@ en la Fase 7.
 ### ✅ Fase 5 — Historial (completa)
 ### ✅ Fase 6 — Polish y deploy (completa)
 
-### Fase 7 — Migración a Google Auth + Edge Function (PENDIENTE)
-- [ ] Crear `supabase/functions/spotify-proxy/index.ts` (ver spec en este archivo)
-- [ ] Eliminar `spotifyToken` de `store/authStore.js`
-- [ ] Actualizar `lib/spotify.js`: funciones sin parámetro token, usando `supabase.functions.invoke`
-- [ ] Actualizar `hooks/useSpotifySearch.js`: eliminar dependencia de spotifyToken
-- [ ] Actualizar `hooks/useAlbums.js` → `useAddAlbum`: eliminar spotifyToken
-- [ ] Actualizar `pages/LoginPage.jsx`: cambiar provider a `'google'`, botón "Continuar con Google"
-- [ ] Deployar Edge Function: `supabase functions deploy spotify-proxy`
-- [ ] Verificar flujo completo: login Google → buscar álbum → añadir → marcar escuchado
+### ✅ Fase 7 — Migración a Google Auth + Edge Function (completa)
+- [x] Crear `supabase/functions/spotify-proxy/index.ts`
+- [x] Eliminar `spotifyToken` de `store/authStore.js`
+- [x] Actualizar `lib/spotify.js`: funciones sin parámetro token, usando `supabase.functions.invoke`
+- [x] Actualizar `hooks/useSpotifySearch.js`: eliminar dependencia de spotifyToken
+- [x] Actualizar `hooks/useAlbums.js` → `useAddAlbum`: eliminar spotifyToken
+- [x] Actualizar `pages/LoginPage.jsx`: provider `'google'`, botón "Continuar con Google"
+- [x] Deployar Edge Function (`supabase functions deploy spotify-proxy`)
+- [x] Verificar flujo completo: login Google → buscar álbum → añadir → marcar escuchado
 
 ---
 
@@ -1059,8 +1062,6 @@ Edge Function desplegada (`supabase functions deploy spotify-proxy`).
   Cubierto en mutaciones y en el buscador en vivo (`useSpotifySearch`).
 - **Error boundary global** (`components/ui/ErrorBoundary.jsx`) envolviendo la app.
 - **`useAddAlbum` respeta `albums_cache`:** solo pega a Spotify si el álbum no está cacheado.
-- **Tests con Vitest** (`npm test`): `lib/spotify`, `lib/utils`, y hooks de mutación
-  (`hooks/useAlbums`) con `@testing-library/react` + `jsdom`.
 
 ### Features post-MVP
 
@@ -1077,3 +1078,23 @@ Edge Function desplegada (`supabase functions deploy spotify-proxy`).
   (`registerServiceWorker`, solo en producción desde `main.jsx`). Botón de instalar
   vía `hooks/useInstallPrompt.js` + `components/ui/InstallButton.jsx`. Íconos
   `public/icon-192.png` y `public/icon-512.png` generados desde `tolisten.png`.
+  En iOS la instalación es manual desde Safari → Compartir → "Añadir a pantalla de
+  inicio" (Safari no dispara `beforeinstallprompt`, así que el botón no aparece en iPhone).
+
+### Testing
+
+- **Runner:** Vitest. Scripts: `npm test` (run único) y `npm run test:watch`.
+  Stack de test: `@testing-library/react` + `jsdom` (devDependencies).
+- Los archivos `*.test.js` que necesitan DOM usan el docblock `// @vitest-environment jsdom`.
+- **Cobertura actual (suite verde):**
+  - `lib/spotify.test.js` — `searchAlbums`/`getAlbumDetails` (incl. `401 → SESSION_EXPIRED`) y `buildAlbumCacheEntry`
+  - `lib/utils.test.js` — formatters y `filterAndSortAlbums`
+  - `hooks/useAlbums.test.js` — mutaciones (add con cache-first y duplicado 23505, mark, revert, delete, notes)
+  - `lib/manifest.test.js`, `lib/pwa.test.js`, `hooks/useInstallPrompt.test.js` — PWA
+- **Convención:** todo cambio en `lib/`, `hooks/` o helpers puros debería venir con su test.
+
+### Convención de git/deploy
+
+- Vercel auto-despliega desde `master`. Para publicar cambios: commit + `git push origin master`.
+- Antes de pushear, dejar verde: `npm test`, `npm run lint` y `npm run build`.
+- `supabase/.temp/` está en `.gitignore` (estado local del CLI, no versionar).
