@@ -17,6 +17,8 @@ const { supabaseMock, setResults, getCalls, resetMock } = vi.hoisted(() => {
       return builder
     })
   builder.from = record('from')
+  builder.select = record('select')
+  builder.maybeSingle = record('maybeSingle')
   builder.upsert = record('upsert')
   builder.insert = record('insert')
   builder.update = record('update')
@@ -84,9 +86,10 @@ const albumDetails = {
 }
 
 describe('useAddAlbum', () => {
-  it('cachea el álbum e inserta el user_album con el user id del store', async () => {
+  it('cuando el álbum no está cacheado: pega a Spotify, hace upsert e inserta', async () => {
     getAlbumDetails.mockResolvedValue(albumDetails)
-    setResults([{ error: null }, { error: null }]) // upsert cache, insert user_album
+    // cache check (no cacheado), upsert cache, insert user_album
+    setResults([{ data: null, error: null }, { error: null }, { error: null }])
 
     const { result } = renderHook(() => useAddAlbum(), { wrapper })
     await act(async () => {
@@ -110,9 +113,29 @@ describe('useAddAlbum', () => {
     })
   })
 
+  it('cuando el álbum ya está cacheado: NO pega a Spotify ni hace upsert, solo inserta', async () => {
+    // cache check (ya cacheado), insert user_album
+    setResults([{ data: { spotify_album_id: 'alb-1' }, error: null }, { error: null }])
+
+    const { result } = renderHook(() => useAddAlbum(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync({ id: 'alb-1' })
+    })
+
+    expect(getAlbumDetails).not.toHaveBeenCalled()
+    expect(findCall('upsert')).toBeFalsy()
+
+    const insert = findCall('insert')
+    expect(insert.args[0]).toEqual({
+      user_id: USER_ID,
+      spotify_album_id: 'alb-1',
+      status: 'pending',
+    })
+  })
+
   it('ignora silenciosamente el duplicado (error 23505) sin lanzar', async () => {
     getAlbumDetails.mockResolvedValue(albumDetails)
-    setResults([{ error: null }, { error: { code: '23505' } }])
+    setResults([{ data: null, error: null }, { error: null }, { error: { code: '23505' } }])
 
     const { result } = renderHook(() => useAddAlbum(), { wrapper })
     await act(async () => {
@@ -122,7 +145,11 @@ describe('useAddAlbum', () => {
 
   it('lanza si el insert falla con un error distinto a 23505', async () => {
     getAlbumDetails.mockResolvedValue(albumDetails)
-    setResults([{ error: null }, { error: { code: '500', message: 'boom' } }])
+    setResults([
+      { data: null, error: null },
+      { error: null },
+      { error: { code: '500', message: 'boom' } },
+    ])
 
     const { result } = renderHook(() => useAddAlbum(), { wrapper })
     await act(async () => {
@@ -132,7 +159,7 @@ describe('useAddAlbum', () => {
 
   it('lanza si falla el upsert al cache (no intenta insertar)', async () => {
     getAlbumDetails.mockResolvedValue(albumDetails)
-    setResults([{ error: { message: 'cache fail' } }])
+    setResults([{ data: null, error: null }, { error: { message: 'cache fail' } }])
 
     const { result } = renderHook(() => useAddAlbum(), { wrapper })
     await act(async () => {

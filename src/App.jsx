@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { supabase } from './lib/supabase'
 import { useAuthStore } from './store/authStore'
 import Toast from './components/ui/Toast'
+import ErrorBoundary from './components/ui/ErrorBoundary'
 import SearchModal from './components/search/SearchModal'
 import BottomNav from './components/ui/BottomNav'
 import LoginPage from './pages/LoginPage'
@@ -79,10 +80,12 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   )
 }

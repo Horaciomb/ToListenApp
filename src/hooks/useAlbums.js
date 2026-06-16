@@ -66,13 +66,22 @@ export function useAddAlbum() {
 
   return useMutation({
     mutationFn: async (albumFromSearch) => {
-      const details = await getAlbumDetails(albumFromSearch.id)
-
-      const cacheEntry = buildAlbumCacheEntry(details)
-      const { error: cacheError } = await supabase
+      // El cache de álbumes es compartido y permanente: solo pegamos a Spotify
+      // (vía Edge Function) si el álbum todavía no está cacheado.
+      const { data: cached } = await supabase
         .from('albums_cache')
-        .upsert(cacheEntry, { onConflict: 'spotify_album_id' })
-      if (cacheError) throw cacheError
+        .select('spotify_album_id')
+        .eq('spotify_album_id', albumFromSearch.id)
+        .maybeSingle()
+
+      if (!cached) {
+        const details = await getAlbumDetails(albumFromSearch.id)
+        const cacheEntry = buildAlbumCacheEntry(details)
+        const { error: cacheError } = await supabase
+          .from('albums_cache')
+          .upsert(cacheEntry, { onConflict: 'spotify_album_id' })
+        if (cacheError) throw cacheError
+      }
 
       const { error: insertError } = await supabase
         .from('user_albums')
